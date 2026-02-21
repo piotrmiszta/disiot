@@ -1,0 +1,5 @@
+build/
+.clang-format
+compile_commands.json
+.idea
+.cache
