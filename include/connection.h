@@ -8,18 +8,20 @@
 typedef struct
 {
     int fd;
-    struct sockaddr_in addr;
     int addr_len;
+    struct sockaddr_in addr;
 } conn_t;
 
 typedef struct
 {
-    int port;
     const char* host;
+    int port;
+    int _padded;
 } conn_param_t;
 
-int conn_start_server(conn_t* conn, conn_param_t params);
+int conn_start_server(conn_t conn[static 1],
+                      const conn_param_t params[static 1]);
 
-int conn_connect(conn_t* conn, conn_param_t params);
+int conn_connect(conn_t conn[static 1], const conn_param_t params[static 1]);
 
 #endif
