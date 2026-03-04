@@ -24,51 +24,95 @@ static void* server_routine(void* arg)
     conn_t* conn = arg;
     socklen_t addrlen = sizeof(conn->addr);
     int fd = accept(conn->fd, (struct sockaddr*)&conn->addr, &addrlen);
-    LOG_TRACE("Accepted client!\n");
+    if (fd < 0)
+    {
+        LOG_ERROR("Cannot accept client: %s\n", strerror(errno));
+        conn->err_code = IOT_ECONN;
+        return &conn->err_code;
+    }
+
+    LOG_TRACE("Accepted client: %s:%d\n", inet_ntoa(conn->addr.sin_addr),
+              ntohs(conn->addr.sin_port));
 
     char buff[1024] = {0};
+
     while (1)
     {
-        read(fd, buff, sizeof(buff));
-        printf("%s", buff);
+        ssize_t bytes_read = read(fd, buff, sizeof(buff));
+        if (bytes_read < 0)
+        {
+            LOG_ERROR("Error reading from client %s:%d: %s",
+                      inet_ntoa(conn->addr.sin_addr),
+                      ntohs(conn->addr.sin_port), strerror(errno));
+
+            conn->err_code = IOT_ECONN;
+            return &conn->err_code;
+        }
+        else if (bytes_read == 0)
+        {
+            LOG_INFO("Client %s:%d disconnected\n",
+                     inet_ntoa(conn->addr.sin_addr),
+                     ntohs(conn->addr.sin_port));
+            conn->err_code = IOT_ECONN;
+            return &conn->err_code;
+        }
+
+        LOG_INFO("Received message from %s:%d: %s",
+                 inet_ntoa(conn->addr.sin_addr), ntohs(conn->addr.sin_port),
+                 buff);
         fflush(stdout);
         memset(buff, 0, 1024);
     }
     return NULL;
 }
 
-int conn_start_server(conn_t conn[static 1],
-                      const conn_param_t params[static 1])
+iot_err_code_t conn_start_server(conn_t conn[static 1],
+                                 const conn_param_t params[static 1])
 {
     conn->fd = socket(AF_INET, SOCK_STREAM, 0);
     if (conn->fd <= 0)
     {
-        LOG_FATAL("Cannot create socket! Aborted ()\n");
-        abort();
+        LOG_FATAL("Cannot create socket! Aborted ()\n"); // TODO: add more info
+                                                         // about error
+        return IOT_ESOCKET;
     }
     conn->addr.sin_family = AF_INET;
     conn->addr.sin_port = htons((uint16_t)params->port);
     conn->addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
+    int opt = 1;
+    if (setsockopt(conn->fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+    {
+        LOG_FATAL("Cannot set socket options: %s", strerror(errno));
+        return IOT_ESOCKET;
+    }
+
     if (bind(conn->fd, (struct sockaddr*)&conn->addr, sizeof(conn->addr)) < 0)
     {
-        LOG_FATAL("Cannot bind to port %d", params->port);
-        abort();
+        LOG_FATAL("Cannot bind to port %d: %s", params->port, strerror(errno));
+        return IOT_EBIND;
     }
 
     listen(conn->fd, 1);
 
-    pthread_create(&server_thread, NULL, server_routine, conn);
+    if (pthread_create(&server_thread, NULL, server_routine, conn) != 0)
+    {
+        LOG_FATAL("Cannot create server thread: %s", strerror(errno));
+        return IOT_ESYS;
+    }
+
     return IOT_SUCCESS;
 }
 
-int conn_connect(conn_t conn[static 1], const conn_param_t params[static 1])
+iot_err_code_t conn_connect(conn_t conn[static 1],
+                            const conn_param_t params[static 1])
 {
     conn->fd = socket(AF_INET, SOCK_STREAM, 0);
     if (conn->fd <= 0)
     {
-        LOG_FATAL("Cannot create socket for connection!\n");
-        abort();
+        LOG_FATAL("Cannot create socket for connection!\n"); // TODO: add more
+                                                             // info about error
+        return IOT_ESOCKET;
     }
 
     conn->addr.sin_family = AF_INET;
@@ -79,14 +123,19 @@ int conn_connect(conn_t conn[static 1], const conn_param_t params[static 1])
         0)
     {
         LOG_ERROR("Cannot connect to server! %s\n", strerror(errno));
-        return -1;
+        return IOT_ECONN;
     }
-    LOG_TRACE("Connected to server!\n");
+    LOG_TRACE("Connected to server: %s:%d\n", inet_ntoa(conn->addr.sin_addr),
+              ntohs(conn->addr.sin_port));
     while (1)
     {
         message_t msg = {.message_type = 1, .crc = 2};
         (void)msg;
-        write(conn->fd, "TEST\n", 6);
+        if (write(conn->fd, "TEST\n", 6) < 0)
+        {
+            LOG_ERROR("Cannot send message to server! %s\n", strerror(errno));
+            return IOT_ECONN;
+        }
         sleep(1);
     }
 }

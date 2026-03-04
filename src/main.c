@@ -3,6 +3,7 @@
 //
 
 #include "connection.h"
+#include "err_codes.h"
 #include "logger.h"
 #include <assert.h>
 #include <stdio.h>
@@ -24,12 +25,20 @@ int main(int argc, char* argv[])
         conn_param_t param = {.port = port};
         conn_t client = {0};
         conn_param_t cparam = {.port = cport};
-        conn_start_server(&conn, &param);
+        if (conn_start_server(&conn, &param) != IOT_SUCCESS)
+        {
+            LOG_ERROR("Cannot start server!\n");
+            return -1; // TODO: return correct error code
+        }
 
         while (1)
         {
-            conn_connect(&client, &cparam);
-            sleep(1);
+            if (conn_connect(&client, &cparam) != IOT_SUCCESS)
+            {
+                LOG_ERROR("Cannot connect to server!\n");
+                return -1; // TODO: return correct error code
+            }
+            sleep(1); // TODO: get rid of sleep
         }
     }
     else
