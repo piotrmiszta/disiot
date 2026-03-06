@@ -1,15 +1,33 @@
-//
-// Created by piotrmiszta on 2/20/26.
-//
+/*
+ * Copyright (c) 2026 Piotr Miszta <miszta.piotr.pm@gmail.com>
+ * This software is released under the MIT License.
+ */
 
 #include "connection.h"
 #include "err_codes.h"
 #include "logger.h"
 #include <assert.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+
+void* client_routine(void* arg)
+{
+    conn_t client = {0};
+    conn_param_t* cparam = (conn_param_t*)arg;
+    while (1)
+    {
+        if (conn_connect(&client, cparam) != IOT_SUCCESS)
+        {
+            LOG_ERROR("Cannot connect to server!\n");
+            // return -1; // TODO: return correct error code
+        }
+        sleep(1); // TODO: get rid of sleep
+    }
+    return NULL;
+}
 
 int main(int argc, char* argv[])
 {
@@ -23,22 +41,17 @@ int main(int argc, char* argv[])
 
         conn_t conn;
         conn_param_t param = {.port = port};
-        conn_t client = {0};
         conn_param_t cparam = {.port = cport};
         if (conn_start_server(&conn, &param) != IOT_SUCCESS)
         {
             LOG_ERROR("Cannot start server!\n");
             return -1; // TODO: return correct error code
         }
+        pthread_t client_thread;
+        pthread_create(&client_thread, NULL, client_routine, &cparam);
 
         while (1)
         {
-            if (conn_connect(&client, &cparam) != IOT_SUCCESS)
-            {
-                LOG_ERROR("Cannot connect to server!\n");
-                return -1; // TODO: return correct error code
-            }
-            sleep(1); // TODO: get rid of sleep
         }
     }
     else

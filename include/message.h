@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2026 Piotr Miszta <miszta.piotr.pm@gmail.com>
+ * This software is released under the MIT License.
+ */
+
 #ifndef IOT_MESSAGE_H_
 #define IOT_MESSAGE_H_
 #include <stdint.h>

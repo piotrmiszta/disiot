@@ -13,3 +13,4 @@ add_executable(${PROJECT_NAME} src/main.c
 	include/message.h)
 
 target_include_directories(${PROJECT_NAME} PUBLIC include/)
+target_link_libraries(${PROJECT_NAME} pthread)

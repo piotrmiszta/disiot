@@ -1,9 +1,15 @@
+/*
+ * Copyright (c) 2026 Piotr Miszta <miszta.piotr.pm@gmail.com>
+ * This software is released under the MIT License.
+ */
+
 #ifndef CONNECTION_H_
 #define CONNECTION_H_
 #include <netinet/in.h>
 #include <stdint.h>
 
 #include "err_codes.h"
+
 /* TODO: this will be platform specific, now interesting is only linux tcp
  * connection */
 

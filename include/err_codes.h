@@ -1,6 +1,7 @@
-//
-// Created by piotrmiszta on 2/20/26.
-//
+/*
+ * Copyright (c) 2026 Piotr Miszta <miszta.piotr.pm@gmail.com>
+ * This software is released under the MIT License.
+ */
 
 #ifndef IOT_ERR_CODES_H
 #define IOT_ERR_CODES_H
