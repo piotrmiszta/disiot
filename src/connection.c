@@ -61,6 +61,20 @@ static void* server_routine(void* arg)
         LOG_INFO("Received message from %s:%d: %s",
                  inet_ntoa(conn->addr.sin_addr), ntohs(conn->addr.sin_port),
                  buff);
+        message_t* message = (message_t*)buff;
+        message_ping_payload_t* payload =
+            (message_ping_payload_t*)message->payload;
+        LOG_DEBUG("Message details: magic=0x%X, version=%d, type=%d, seq=%d, "
+                  "dest=%s:%d, src=%s:%d, payload_size=%d, flags=0x%X, "
+                  "crc=0x%X PAYLOAD: entries=%d, time_stamp=%lu\n",
+                  message->magic_number, message->version,
+                  message->message_type, message->sequence_number,
+                  inet_ntoa(*(struct in_addr*)&message->dest),
+                  ntohs(*(uint16_t*)&message->dest + 4),
+                  inet_ntoa(*(struct in_addr*)&message->src),
+                  ntohs(*(uint16_t*)&message->src + 4), message->payload_size,
+                  message->flags, message->crc, payload->number_of_entries,
+                  payload->entries[0].time_stamp);
         fflush(stdout);
         memset(buff, 0, 1024);
     }
@@ -130,9 +144,31 @@ iot_err_code_t conn_connect(conn_t conn[static 1],
               ntohs(conn->addr.sin_port));
     while (1)
     {
-        message_t msg = {.message_type = 1, .crc = 2};
-        (void)msg;
-        if (write(conn->fd, "TEST\n", 6) < 0)
+        char buffer[sizeof(message_t) + sizeof(message_ping_payload_t) +
+                    sizeof(traceroute_entry_t)] = {0};
+
+        message_ping_payload_t* payload =
+            (message_ping_payload_t*)(buffer + sizeof(message_t));
+        traceroute_entry_t* entry = payload->entries;
+        payload->number_of_entries = 1;
+        entry->ip_addr = inet_addr("127.0.0.1");
+        entry->hop_number = 1;
+        entry->status = 0;
+        entry->time_stamp = time(NULL);
+
+        message_t* message = (message_t*)buffer;
+        message->magic_number = 0xAB;
+        message->version = 1;
+        message->message_type = IOT_MESSAGE_PING;
+        message->sequence_number = 0;
+        message->dest = inet_addr("127.0.0.1");
+        message->src = inet_addr("127.0.0.1");
+        message->payload_size =
+            sizeof(message_ping_payload_t) + sizeof(traceroute_entry_t);
+        message->flags = 0;
+        message->crc = 0; // TODO: calculate crc
+
+        if (write(conn->fd, buffer, sizeof(buffer)) < 0)
         {
             LOG_ERROR("Cannot send message to server! %s\n", strerror(errno));
             return IOT_ECONN;
