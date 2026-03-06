@@ -15,11 +15,11 @@
         fflush(stdout);                                                        \
     } while (0)
 
-#define LOG_DEBUG(...) _log("DEBUG", __VA_ARGS__)
-#define LOG_ERROR(...) _log("ERROR", __VA_ARGS__)
-#define LOG_WARNING(...) _log("WARNING", __VA_ARGS__)
-#define LOG_FATAL(...) _log("FATAL", __VA_ARGS__)
-#define LOG_INFO(...) _log("INFO", __VA_ARGS__)
+#define LOG_DEBUG(...) _log("\x1b[32mDEBUG\x1b[0m", __VA_ARGS__)
+#define LOG_ERROR(...) _log("\x1b[31mERROR\x1b[0m", __VA_ARGS__)
+#define LOG_WARNING(...) _log("\x1b[34mWARNING\x1b[0m", __VA_ARGS__)
+#define LOG_FATAL(...) _log("\x1b[31mFATAL\x1b[0m", __VA_ARGS__)
+#define LOG_INFO(...) _log("\x1b[35mINFO\x1b[0m", __VA_ARGS__)
 
-#define LOG_TRACE(...) _log("TRACE", __VA_ARGS__)
+#define LOG_TRACE(...) _log("\x1b[33mTRACE\x1b[0m", __VA_ARGS__)
 #endif // IOT_LOGGER_H

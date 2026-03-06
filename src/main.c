@@ -40,8 +40,8 @@ int main(int argc, char* argv[])
         LOG_DEBUG("Server port: %d, client_port = %d\n", port, cport);
 
         conn_t conn;
-        conn_param_t param = {.port = port};
-        conn_param_t cparam = {.port = cport};
+        conn_param_t param = {.port = port, .host = "127.0.0.1"};
+        conn_param_t cparam = {.port = cport, .host = "127.0.0.1"};
         if (conn_start_server(&conn, &param) != IOT_SUCCESS)
         {
             LOG_ERROR("Cannot start server!\n");

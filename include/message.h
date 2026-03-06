@@ -32,9 +32,11 @@ typedef struct message_t
     uint8_t magic_number;
     uint8_t version;
     uint8_t message_type;
-    uint8_t sequence_number; /* Sequence number specify which exactly  */
-    uint32_t dest;
-    uint32_t src;
+    uint8_t sequence_number;
+    uint32_t src_addr;
+    uint32_t dest_addr;
+    uint16_t src_port;
+    uint16_t dest_port;
     uint32_t payload_size;
     uint16_t flags;
     uint16_t crc;
@@ -58,5 +60,7 @@ typedef struct message_ping_payload_t
     uint32_t reserved;
     traceroute_entry_t entries[];
 } message_ping_payload_t;
+
+void message_dump(const message_t* message);
 
 #endif

@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 static pthread_t server_thread;
@@ -58,24 +59,12 @@ static void* server_routine(void* arg)
             return &conn->err_code;
         }
 
-        LOG_INFO("Received message from %s:%d: %s",
-                 inet_ntoa(conn->addr.sin_addr), ntohs(conn->addr.sin_port),
-                 buff);
+        LOG_TRACE("Received message from %s:%d: %s\n",
+                  inet_ntoa(conn->addr.sin_addr), ntohs(conn->addr.sin_port),
+                  buff);
         message_t* message = (message_t*)buff;
-        message_ping_payload_t* payload =
-            (message_ping_payload_t*)message->payload;
-        LOG_DEBUG("Message details: magic=0x%X, version=%d, type=%d, seq=%d, "
-                  "dest=%s:%d, src=%s:%d, payload_size=%d, flags=0x%X, "
-                  "crc=0x%X PAYLOAD: entries=%d, time_stamp=%lu\n",
-                  message->magic_number, message->version,
-                  message->message_type, message->sequence_number,
-                  inet_ntoa(*(struct in_addr*)&message->dest),
-                  ntohs(*(uint16_t*)&message->dest + 4),
-                  inet_ntoa(*(struct in_addr*)&message->src),
-                  ntohs(*(uint16_t*)&message->src + 4), message->payload_size,
-                  message->flags, message->crc, payload->number_of_entries,
-                  payload->entries[0].time_stamp);
-        fflush(stdout);
+
+        message_dump(message);
         memset(buff, 0, 1024);
     }
     return NULL;
@@ -131,7 +120,7 @@ iot_err_code_t conn_connect(conn_t conn[static 1],
     }
 
     conn->addr.sin_family = AF_INET;
-    conn->addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    conn->addr.sin_addr.s_addr = inet_addr(params->host);
     conn->addr.sin_port = htons((uint16_t)params->port);
 
     if (connect(conn->fd, (struct sockaddr*)&conn->addr, sizeof(conn->addr)) <
@@ -142,11 +131,22 @@ iot_err_code_t conn_connect(conn_t conn[static 1],
     }
     LOG_TRACE("Connected to server: %s:%d\n", inet_ntoa(conn->addr.sin_addr),
               ntohs(conn->addr.sin_port));
+
+    struct sockaddr_in local_addr;
+    socklen_t addr_len = sizeof(local_addr);
+    if (getsockname(conn->fd, (struct sockaddr*)&local_addr, &addr_len) < 0)
+    {
+        LOG_ERROR("getsockname failed: %s\n", strerror(errno));
+        return IOT_ESYS;
+    }
+
     while (1)
     {
         char buffer[sizeof(message_t) + sizeof(message_ping_payload_t) +
                     sizeof(traceroute_entry_t)] = {0};
 
+        struct timeval time;
+        gettimeofday(&time, NULL);
         message_ping_payload_t* payload =
             (message_ping_payload_t*)(buffer + sizeof(message_t));
         traceroute_entry_t* entry = payload->entries;
@@ -154,15 +154,17 @@ iot_err_code_t conn_connect(conn_t conn[static 1],
         entry->ip_addr = inet_addr("127.0.0.1");
         entry->hop_number = 1;
         entry->status = 0;
-        entry->time_stamp = time(NULL);
+        entry->time_stamp = time.tv_sec * 1000000 + time.tv_usec;
 
         message_t* message = (message_t*)buffer;
         message->magic_number = 0xAB;
         message->version = 1;
         message->message_type = IOT_MESSAGE_PING;
         message->sequence_number = 0;
-        message->dest = inet_addr("127.0.0.1");
-        message->src = inet_addr("127.0.0.1");
+        message->dest_addr = conn->addr.sin_addr.s_addr;
+        message->dest_port = conn->addr.sin_port;
+        message->src_addr = local_addr.sin_addr.s_addr;
+        message->src_port = local_addr.sin_port;
         message->payload_size =
             sizeof(message_ping_payload_t) + sizeof(traceroute_entry_t);
         message->flags = 0;
