@@ -18,14 +18,6 @@ typedef enum MessageTypeE
     IOT_MESSAGE_ACK,
 } MessageTypeE;
 
-/*
-    |  0x00   |   0x01   |   0x02   |   0x03   |   0x04   |   0x05   |   0x06 |
-   0x07   |
-    ---------------------------------------------------------------------------------------
-    | magic   | version  |  type    |  seq     |
-    | number  |
-*/
-
 typedef struct message_t
 {
     /* HEADER START */
@@ -61,6 +53,20 @@ typedef struct message_ping_payload_t
     traceroute_entry_t entries[];
 } message_ping_payload_t;
 
+/* Think about this payload*/
+typedef message_ping_payload_t message_pong_payload_t;
+
+#define MESSAGE_HEADER_SIZE sizeof(message_t)
+#define MESSAGE_PING_PAYLOAD_SIZE sizeof(message_ping_payload_t)
+#define MESSAGE_PONG_PAYLOAD_SIZE sizeof(message_pong_payload_t)
+#define TRACEROUTE_ENTRY_SIZE sizeof(traceroute_entry_t)
+
+typedef struct conn_t conn_t;
+struct sockaddr_in;
+
 void message_dump(const message_t* message);
+uint64_t assign_ping_payload(message_t* message,
+                             message_ping_payload_t* payload, conn_t* conn,
+                             struct sockaddr_in local_addr);
 
 #endif

@@ -13,7 +13,7 @@
 /* TODO: this will be platform specific, now interesting is only linux tcp
  * connection */
 
-typedef struct
+typedef struct conn_t
 {
     int fd;
     int addr_len;

@@ -50,9 +50,8 @@ int main(int argc, char* argv[])
         pthread_t client_thread;
         pthread_create(&client_thread, NULL, client_routine, &cparam);
 
-        while (1)
-        {
-        }
+        pthread_join(client_thread, NULL);
+        close(conn.fd);
     }
     else
     {

@@ -59,13 +59,26 @@ static void* server_routine(void* arg)
             return &conn->err_code;
         }
 
-        LOG_TRACE("Received message from %s:%d: %s\n",
-                  inet_ntoa(conn->addr.sin_addr), ntohs(conn->addr.sin_port),
-                  buff);
-        message_t* message = (message_t*)buff;
-
-        message_dump(message);
         memset(buff, 0, 1024);
+
+        char buffer[MESSAGE_HEADER_SIZE + MESSAGE_PING_PAYLOAD_SIZE +
+                    TRACEROUTE_ENTRY_SIZE] = {0};
+
+        assign_ping_payload(
+            (message_t*)buffer,
+            (message_ping_payload_t*)(buffer + MESSAGE_HEADER_SIZE), conn,
+            conn->addr);
+
+        if (write(fd, buffer, sizeof(buffer)) < 0)
+        {
+            LOG_ERROR("Cannot send message to client %s:%d: %s",
+                      inet_ntoa(conn->addr.sin_addr),
+                      ntohs(conn->addr.sin_port), strerror(errno));
+            conn->err_code = IOT_ECONN;
+            return &conn->err_code;
+        }
+        LOG_TRACE("Sent pong message to client %s:%d\n",
+                  inet_ntoa(conn->addr.sin_addr), ntohs(conn->addr.sin_port));
     }
     return NULL;
 }
@@ -93,7 +106,8 @@ iot_err_code_t conn_start_server(conn_t conn[static 1],
 
     if (bind(conn->fd, (struct sockaddr*)&conn->addr, sizeof(conn->addr)) < 0)
     {
-        LOG_FATAL("Cannot bind to port %d: %s", params->port, strerror(errno));
+        LOG_FATAL("Cannot bind to port %d: %s\n", params->port,
+                  strerror(errno));
         return IOT_EBIND;
     }
 
@@ -142,39 +156,39 @@ iot_err_code_t conn_connect(conn_t conn[static 1],
 
     while (1)
     {
-        char buffer[sizeof(message_t) + sizeof(message_ping_payload_t) +
-                    sizeof(traceroute_entry_t)] = {0};
+        /* Currently send only PING message */
+        char buffer[MESSAGE_HEADER_SIZE + MESSAGE_PING_PAYLOAD_SIZE +
+                    TRACEROUTE_ENTRY_SIZE] = {0};
 
-        struct timeval time;
-        gettimeofday(&time, NULL);
-        message_ping_payload_t* payload =
-            (message_ping_payload_t*)(buffer + sizeof(message_t));
-        traceroute_entry_t* entry = payload->entries;
-        payload->number_of_entries = 1;
-        entry->ip_addr = inet_addr("127.0.0.1");
-        entry->hop_number = 1;
-        entry->status = 0;
-        entry->time_stamp = time.tv_sec * 1000000 + time.tv_usec;
-
-        message_t* message = (message_t*)buffer;
-        message->magic_number = 0xAB;
-        message->version = 1;
-        message->message_type = IOT_MESSAGE_PING;
-        message->sequence_number = 0;
-        message->dest_addr = conn->addr.sin_addr.s_addr;
-        message->dest_port = conn->addr.sin_port;
-        message->src_addr = local_addr.sin_addr.s_addr;
-        message->src_port = local_addr.sin_port;
-        message->payload_size =
-            sizeof(message_ping_payload_t) + sizeof(traceroute_entry_t);
-        message->flags = 0;
-        message->crc = 0; // TODO: calculate crc
-
+        uint64_t first_time_stamp = assign_ping_payload(
+            (message_t*)buffer,
+            (message_ping_payload_t*)(buffer + MESSAGE_HEADER_SIZE), conn,
+            local_addr);
         if (write(conn->fd, buffer, sizeof(buffer)) < 0)
         {
             LOG_ERROR("Cannot send message to server! %s\n", strerror(errno));
             return IOT_ECONN;
         }
+        LOG_TRACE("Sent PING message to server\n");
+
+        char recv_buffer[1024] = {0};
+        ssize_t bytes_read = read(conn->fd, recv_buffer, sizeof(recv_buffer));
+        if (bytes_read < 0)
+        {
+            LOG_ERROR("Error reading from server: %s\n", strerror(errno));
+            return IOT_ECONN;
+        }
+        else if (bytes_read == 0)
+        {
+            LOG_INFO("Server disconnected\n");
+            return IOT_ECONN;
+        }
+
+        LOG_TRACE("Received pong message elapsed time: %lu microseconds\n",
+                  ((message_ping_payload_t*)(recv_buffer + MESSAGE_HEADER_SIZE))
+                          ->entries[0]
+                          .time_stamp -
+                      first_time_stamp);
         sleep(1);
     }
 }

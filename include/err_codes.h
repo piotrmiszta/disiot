@@ -16,6 +16,8 @@ typedef enum
     IOT_EBIND = -5,
     IOT_ELISTEN = -6,
     IOT_ESYS = -7,
+
+    IOT_MESSAGE_TOO_SHORT = -100,
 } iot_err_code_t;
 
 #endif // IOT_ERR_CODES_H

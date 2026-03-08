@@ -4,21 +4,29 @@
  */
 
 #include "message.h"
+#include "connection.h"
+#include "err_codes.h"
 #include "logger.h"
 #include <arpa/inet.h>
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/time.h>
 
-message_t parse_message_header(const char* buffer, uint64_t buffer_size)
+iot_err_code_t parse_message_header(const char* buffer, uint64_t buffer_size,
+                                    message_t* message)
 {
     if (buffer_size < sizeof(message_t))
     {
         // Handle error: buffer too small
+        LOG_ERROR("Buffer size (%lu) is too small to contain a valid message "
+                  "header\n",
+                  buffer_size);
+        return IOT_MESSAGE_TOO_SHORT;
     }
-    message_t message;
-    memcpy(&message, buffer, sizeof(message_t));
-    return message;
+
+    memcpy(message, buffer, sizeof(message_t));
+    return IOT_SUCCESS;
 }
 
 void message_dump(const message_t* message)
@@ -37,8 +45,8 @@ void message_dump(const message_t* message)
             inet_ntoa(*(struct in_addr*)&message->dest_addr),
             ntohs(message->dest_port),
             inet_ntoa(*(struct in_addr*)&message->src_addr),
-            ntohs(message->src_port), message->payload_size,
-            message->flags, message->crc, payload->number_of_entries,
+            ntohs(message->src_port), message->payload_size, message->flags,
+            message->crc, payload->number_of_entries,
             payload->entries[0].time_stamp);
         break;
     case IOT_MESSAGE_PONG:
@@ -53,4 +61,32 @@ void message_dump(const message_t* message)
         assert(0 && "Not implemented message dump for this type");
         break;
     }
+}
+
+uint64_t assign_ping_payload(message_t* message,
+                             message_ping_payload_t* payload, conn_t* conn,
+                             struct sockaddr_in local_addr)
+{
+    struct timeval time;
+    gettimeofday(&time, NULL);
+    traceroute_entry_t* entry = payload->entries;
+    payload->number_of_entries = 1;
+    entry->ip_addr = inet_addr("127.0.0.1");
+    entry->hop_number = 1;
+    entry->status = 0;
+    entry->time_stamp = time.tv_sec * 1000000 + time.tv_usec;
+
+    message->magic_number = 0xAB;
+    message->version = 1;
+    message->message_type = IOT_MESSAGE_PING;
+    message->sequence_number = 0;
+    message->dest_addr = conn->addr.sin_addr.s_addr;
+    message->dest_port = conn->addr.sin_port;
+    message->src_addr = local_addr.sin_addr.s_addr;
+    message->src_port = local_addr.sin_port;
+    message->payload_size =
+        sizeof(message_ping_payload_t) + sizeof(traceroute_entry_t);
+    message->flags = 0;
+    message->crc = 0; // TODO: calculate crc
+    return entry->time_stamp;
 }

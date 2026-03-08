@@ -2,7 +2,7 @@
 cmake_minimum_required(VERSION 3.30)
 project(IOT)
 
-set(CMAKE_C_FLAGS "-g -Werror -Wall -Wextra -pedantic -std=c2x -Wpadded")
+set(CMAKE_C_FLAGS "-g -Werror -Wall -Wextra -pedantic -std=c2x -Wpadded -O3")
 
 
 add_executable(${PROJECT_NAME} src/main.c
