@@ -8,11 +8,15 @@ set(CMAKE_C_FLAGS "-g -Werror -Wall -Wextra -pedantic -std=c2x -Wpadded -O3")
 add_executable(${PROJECT_NAME} src/main.c
         src/connection.c
         src/message.c
-        
+        src/client.c
+	src/server.c
+	
         include/connection.h
         include/err_codes.h
         include/logger.h
 	include/message.h
+	include/client.h
+	include/server.h
         )
 
 target_include_directories(${PROJECT_NAME} PUBLIC include/)

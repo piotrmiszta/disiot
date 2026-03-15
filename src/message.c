@@ -13,6 +13,8 @@
 #include <string.h>
 #include <sys/time.h>
 
+#define MESSAGE_MAX_LENGTH 1024
+
 iot_err_code_t parse_message_header(const char* buffer, uint64_t buffer_size,
                                     message_t* message)
 {
@@ -53,7 +55,6 @@ void message_dump(const message_t* message)
     case IOT_MESSAGE_GET:
     case IOT_MESSAGE_POST:
     case IOT_MESSAGE_INFO:
-    case IOT_MESSAGE_REPLY:
     case IOT_MESSAGE_ACK:
         assert(0 && "Not implemented message dump for this type");
         break;
@@ -89,4 +90,66 @@ uint64_t assign_ping_payload(message_t* message,
     message->flags = 0;
     message->crc = 0; // TODO: calculate crc
     return entry->time_stamp;
+}
+
+iot_err_code_t parse_message(const char* buffer, uint64_t buffer_size,
+                             message_t* message)
+{
+    /* calculate message size */
+    if (sizeof(message_t) > buffer_size)
+    {
+        LOG_ERROR("Buffer size (%lu) is too small to contain a valid message "
+                  "header\n",
+                  buffer_size);
+        return IOT_MESSAGE_TOO_SHORT;
+    }
+    memcpy(message, buffer, sizeof(message_t));
+    uint64_t message_size = sizeof(message_t) + message->payload_size;
+    if (message_size > buffer_size)
+    {
+        LOG_ERROR("Buffer size (%lu) is too small to contain the complete "
+                  "message\n",
+                  buffer_size);
+        return IOT_MESSAGE_TOO_SHORT;
+    }
+
+    if (message->magic_number != 0xAB)
+    {
+        LOG_ERROR("Invalid magic number: expected 0xAB, got 0x%X\n",
+                  message->magic_number);
+        return IOT_MESSAGE_INVALID_MAGIC;
+    }
+
+    if (message->version != 1)
+    {
+        LOG_ERROR("Unsupported message version: expected 1, got %d\n",
+                  message->version);
+        return IOT_MESSAGE_INVALID_VERSION;
+    }
+
+    if (message->payload_size == 0 ||
+        message->payload_size > MESSAGE_MAX_LENGTH)
+    {
+        LOG_ERROR("Invalid payload size: %d\n", message->payload_size);
+        return IOT_MESSAGE_INVALID_PAYLOAD_SIZE;
+    }
+
+    if (message->flags & 0xFFFE)
+    {
+        LOG_ERROR("Invalid flags: only bit 0 (LAST_MESSAGE_IN_SEQUENCE) and "
+                  "bit 1 (ACK) can be set, got 0x%X\n",
+                  message->flags);
+        return IOT_MESSAGE_INVALID_FLAGS;
+    }
+
+    /* check CRC */
+    int16_t crc16_calculated = 0;
+    if (message->crc != 0)
+    {
+        LOG_ERROR("Invalid crc! expected: %d, received: %d\n", crc16_calculated,
+                  message->crc);
+        return IOT_MESSAGE_INVALID_CRC;
+    }
+
+    return IOT_SUCCESS;
 }

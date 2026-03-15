@@ -13,22 +13,6 @@
 #include <time.h>
 #include <unistd.h>
 
-void* client_routine(void* arg)
-{
-    conn_t client = {0};
-    conn_param_t* cparam = (conn_param_t*)arg;
-    while (1)
-    {
-        if (conn_connect(&client, cparam) != IOT_SUCCESS)
-        {
-            LOG_ERROR("Cannot connect to server!\n");
-            // return -1; // TODO: return correct error code
-        }
-        sleep(1); // TODO: get rid of sleep
-    }
-    return NULL;
-}
-
 int main(int argc, char* argv[])
 {
     printf("%lu %lu\n", sizeof(time_t), sizeof(int));
@@ -47,11 +31,12 @@ int main(int argc, char* argv[])
             LOG_ERROR("Cannot start server!\n");
             return -1; // TODO: return correct error code
         }
-        pthread_t client_thread;
-        pthread_create(&client_thread, NULL, client_routine, &cparam);
+        conn_t cconn;
+        conn_connect(&cconn, &cparam);
 
-        pthread_join(client_thread, NULL);
-        close(conn.fd);
+        while (1)
+        {
+        };
     }
     else
     {

@@ -4,10 +4,11 @@
  */
 
 #include "connection.h"
-
+#include "client.h"
 #include "err_codes.h"
 #include "logger.h"
 #include "message.h"
+#include "server.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <pthread.h>
@@ -18,70 +19,7 @@
 #include <unistd.h>
 
 static pthread_t server_thread;
-
-static void* server_routine(void* arg);
-
-static void* server_routine(void* arg)
-{
-    conn_t* conn = arg;
-    socklen_t addrlen = sizeof(conn->addr);
-    int fd = accept(conn->fd, (struct sockaddr*)&conn->addr, &addrlen);
-    if (fd < 0)
-    {
-        LOG_ERROR("Cannot accept client: %s\n", strerror(errno));
-        conn->err_code = IOT_ECONN;
-        return &conn->err_code;
-    }
-
-    LOG_TRACE("Accepted client: %s:%d\n", inet_ntoa(conn->addr.sin_addr),
-              ntohs(conn->addr.sin_port));
-
-    char buff[1024] = {0};
-
-    while (1)
-    {
-        ssize_t bytes_read = read(fd, buff, sizeof(buff));
-        if (bytes_read < 0)
-        {
-            LOG_ERROR("Error reading from client %s:%d: %s",
-                      inet_ntoa(conn->addr.sin_addr),
-                      ntohs(conn->addr.sin_port), strerror(errno));
-
-            conn->err_code = IOT_ECONN;
-            return &conn->err_code;
-        }
-        else if (bytes_read == 0)
-        {
-            LOG_INFO("Client %s:%d disconnected\n",
-                     inet_ntoa(conn->addr.sin_addr),
-                     ntohs(conn->addr.sin_port));
-            conn->err_code = IOT_ECONN;
-            return &conn->err_code;
-        }
-
-        memset(buff, 0, 1024);
-
-        char buffer[MESSAGE_HEADER_SIZE + MESSAGE_PING_PAYLOAD_SIZE +
-                    TRACEROUTE_ENTRY_SIZE] = {0};
-
-        assign_ping_payload(
-            (message_t*)buffer,
-            (message_ping_payload_t*)(buffer + MESSAGE_HEADER_SIZE), conn,
-            conn->addr);
-
-        if (write(fd, buffer, sizeof(buffer)) < 0)
-        {
-            LOG_ERROR("Cannot send message to client %s:%d: %s",
-                      inet_ntoa(conn->addr.sin_addr),
-                      ntohs(conn->addr.sin_port), strerror(errno));
-            conn->err_code = IOT_ECONN;
-            return &conn->err_code;
-        }
-        LOG_TRACE("Sent pong message to client %s:%d\n",
-                  inet_ntoa(conn->addr.sin_addr), ntohs(conn->addr.sin_port));
-    }
-    return NULL;
-}
+static pthread_t client_thread;
 
 iot_err_code_t conn_start_server(conn_t conn[static 1],
                                  const conn_param_t params[static 1])
@@ -137,58 +75,22 @@ iot_err_code_t conn_connect(conn_t conn[static 1],
     conn->addr.sin_addr.s_addr = inet_addr(params->host);
     conn->addr.sin_port = htons((uint16_t)params->port);
 
-    if (connect(conn->fd, (struct sockaddr*)&conn->addr, sizeof(conn->addr)) <
-        0)
-    {
-        LOG_ERROR("Cannot connect to server! %s\n", strerror(errno));
-        return IOT_ECONN;
-    }
-    LOG_TRACE("Connected to server: %s:%d\n", inet_ntoa(conn->addr.sin_addr),
-              ntohs(conn->addr.sin_port));
-
-    struct sockaddr_in local_addr;
-    socklen_t addr_len = sizeof(local_addr);
-    if (getsockname(conn->fd, (struct sockaddr*)&local_addr, &addr_len) < 0)
-    {
-        LOG_ERROR("getsockname failed: %s\n", strerror(errno));
-        return IOT_ESYS;
-    }
-
     while (1)
     {
-        /* Currently send only PING message */
-        char buffer[MESSAGE_HEADER_SIZE + MESSAGE_PING_PAYLOAD_SIZE +
-                    TRACEROUTE_ENTRY_SIZE] = {0};
-
-        uint64_t first_time_stamp = assign_ping_payload(
-            (message_t*)buffer,
-            (message_ping_payload_t*)(buffer + MESSAGE_HEADER_SIZE), conn,
-            local_addr);
-        if (write(conn->fd, buffer, sizeof(buffer)) < 0)
+        if (connect(conn->fd, (struct sockaddr*)&conn->addr,
+                    sizeof(conn->addr)) < 0)
         {
-            LOG_ERROR("Cannot send message to server! %s\n", strerror(errno));
-            return IOT_ECONN;
+            LOG_ERROR("Cannot connect to server! %s\n", strerror(errno));
+            sleep(1);
         }
-        LOG_TRACE("Sent PING message to server\n");
-
-        char recv_buffer[1024] = {0};
-        ssize_t bytes_read = read(conn->fd, recv_buffer, sizeof(recv_buffer));
-        if (bytes_read < 0)
+        else
         {
-            LOG_ERROR("Error reading from server: %s\n", strerror(errno));
-            return IOT_ECONN;
+            LOG_TRACE("Connected to server: %s:%d\n",
+                      inet_ntoa(conn->addr.sin_addr),
+                      ntohs(conn->addr.sin_port));
+            break;
         }
-        else if (bytes_read == 0)
-        {
-            LOG_INFO("Server disconnected\n");
-            return IOT_ECONN;
-        }
-
-        LOG_TRACE("Received pong message elapsed time: %lu microseconds\n",
-                  ((message_ping_payload_t*)(recv_buffer + MESSAGE_HEADER_SIZE))
-                          ->entries[0]
-                          .time_stamp -
-                      first_time_stamp);
-        sleep(1);
     }
+    pthread_create(&client_thread, NULL, client_routine, conn);
+    return IOT_SUCCESS;
 }
